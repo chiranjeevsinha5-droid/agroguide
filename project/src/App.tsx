@@ -1,15 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { Session, User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { useMemo, useState } from 'react';
 import {
   ArrowLeft, ArrowRight, Check, ChevronDown, Droplets, Leaf,
-  Menu, Search, ShieldCheck, Sprout, Sun, Timer, Wheat, X, CircleHelp, UserRound, LogOut,
+  Menu, Search, ShieldCheck, Sprout, Sun, Timer, Wheat, X, CircleHelp,
 } from 'lucide-react';
 
-type Page = 'home' | 'find' | 'guide' | 'about' | 'result' | 'login' | 'account';
+type Page = 'home' | 'find' | 'guide' | 'about' | 'result';
 type Question = 'location' | 'soil' | 'water' | 'rainfall' | 'season' | 'goal';
 type Answers = { state: string; district: string; soil: string; water: string; rainfall: string; season: string; goal: string };
-type Profile = Answers & { display_name: string };
 
 type Crop = {
   name: string; season: string; water: string; weather: string; soil: string;
@@ -52,24 +49,9 @@ function App() {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Answers>(initialAnswers);
   const [search, setSearch] = useState('');
-  const [session, setSession] = useState<Session | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthLoading(false); });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      setAuthLoading(false);
-    });
-    return () => listener.subscription.unsubscribe();
-  }, []);
-
   const go = (next: Page) => { setPage(next); setMobileOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); };
-  const openAccount = () => go(session ? 'account' : 'login');
   const update = (key: keyof Answers, value: string) => setAnswers((current) => ({ ...current, [key]: value }));
   const filteredCrops = useMemo(() => crops.filter((crop) => crop.name.toLowerCase().includes(search.toLowerCase())), [search]);
-
-  if (authLoading) return <div className="loading-screen"><span className="brand-mark"><Leaf size={19} fill="currentColor" /></span><p>Loading AgriGuide...</p></div>;
 
   return (
     <div className="app-shell">
@@ -81,7 +63,6 @@ function App() {
           <button className={page === 'find' || page === 'result' ? 'nav-link active' : 'nav-link'} onClick={() => go('find')}>Find Crop</button>
           <button className={page === 'guide' ? 'nav-link active' : 'nav-link'} onClick={() => go('guide')}>Crop Guide</button>
           <button className={page === 'about' ? 'nav-link active' : 'nav-link'} onClick={() => go('about')}>About</button>
-          <button className={page === 'account' || page === 'login' ? 'account-link active' : 'account-link'} onClick={openAccount}><UserRound size={15} /> {session ? 'My Account' : 'Sign in'}</button>
         </nav>
       </header>
 
@@ -90,61 +71,10 @@ function App() {
       {page === 'result' && <Result answers={answers} onTryAgain={() => { setStep(0); go('find'); }} onGuide={() => go('guide')} />}
       {page === 'guide' && <Guide search={search} setSearch={setSearch} crops={filteredCrops} />}
       {page === 'about' && <About onNavigate={go} />}
-      {page === 'login' && <Login onSuccess={() => go('account')} />}
-      {page === 'account' && session && <Account user={session.user} answers={answers} onAnswersChange={setAnswers} onSignOut={async () => { await supabase.auth.signOut(); go('home'); }} />}
 
-      {page !== 'login' && <footer className="site-footer"><div className="footer-inner"><div className="footer-brand"><span className="brand-mark"><Leaf size={17} fill="currentColor" /></span><strong>AgriGuide</strong><p>Simple crop advice for better farming decisions.</p></div><div className="footer-links"><button onClick={() => go('find')}>Find Crop</button><button onClick={() => go('guide')}>Crop Guide</button><button onClick={() => go('about')}>About us</button></div><div className="footer-note">Made for farmers, with care.</div></div></footer>}
+      <footer className="site-footer"><div className="footer-inner"><div className="footer-brand"><span className="brand-mark"><Leaf size={17} fill="currentColor" /></span><strong>AgriGuide</strong><p>Simple crop advice for better farming decisions.</p></div><div className="footer-links"><button onClick={() => go('find')}>Find Crop</button><button onClick={() => go('guide')}>Crop Guide</button><button onClick={() => go('about')}>About us</button></div><div className="footer-note">Made for farmers, with care.</div></div></footer>
     </div>
   );
-}
-
-function Login({ onSuccess }: { onSuccess: () => void }) {
-  const [signUp, setSignUp] = useState(false);
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); setBusy(true); setError(''); setMessage('');
-    const result = signUp
-      ? await supabase.auth.signUp({ email, password, options: { data: { display_name: name } } })
-      : await supabase.auth.signInWithPassword({ email, password });
-    setBusy(false);
-    if (result.error) { setError(signUp ? 'We could not create your account. Please check your details and try again.' : 'The email or password is not correct. Please try again.'); return; }
-    if (signUp && !result.data.session) { setMessage('Your account was created. You can now sign in with your email and password.'); setSignUp(false); return; }
-    onSuccess();
-  };
-
-  return <main className="auth-page"><section className="auth-card"><div className="auth-intro"><span className="brand-mark"><Leaf size={21} fill="currentColor" /></span><p className="eyebrow">Your farming companion</p><h1>{signUp ? 'Create your AgriGuide account' : 'Welcome back'}</h1><p>{signUp ? 'Save your farm details and return to your recommendations anytime.' : 'Sign in to keep your farm details and crop choices together.'}</p></div><form className="auth-form" onSubmit={submit}>{signUp && <label><span>Your name</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Ramesh Kumar" required /></label>}<label><span>Email address</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required /></label><label><span>Password</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 6 characters" minLength={6} required /></label>{error && <p className="form-message error">{error}</p>}{message && <p className="form-message success">{message}</p>}<button className="button primary auth-submit" disabled={busy}>{busy ? 'Please wait...' : signUp ? 'Create account' : 'Sign in'} <ArrowRight size={16} /></button></form><p className="auth-switch">{signUp ? 'Already have an account?' : 'New to AgriGuide?'} <button onClick={() => { setSignUp(!signUp); setError(''); setMessage(''); }}>{signUp ? 'Sign in' : 'Create an account'}</button></p></section></main>;
-}
-
-function Account({ user, answers, onAnswersChange, onSignOut }: { user: User; answers: Answers; onAnswersChange: (value: Answers) => void; onSignOut: () => Promise<void> }) {
-  const [profile, setProfile] = useState<Profile>({ ...answers, display_name: String(user.user_metadata.display_name || '') });
-  const [status, setStatus] = useState('');
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    supabase.from('farmer_profiles').select('display_name,state,district,soil,water,rainfall,season,goal').eq('id', user.id).maybeSingle().then(({ data, error: loadError }) => {
-      if (loadError) { console.error('profile load failed', loadError); setError('Your saved details could not be loaded.'); return; }
-      if (data) { const nextProfile = data as Profile; setProfile(nextProfile); onAnswersChange({ state: nextProfile.state, district: nextProfile.district, soil: nextProfile.soil, water: nextProfile.water, rainfall: nextProfile.rainfall, season: nextProfile.season, goal: nextProfile.goal }); }
-    });
-  }, [onAnswersChange, user.id]);
-
-  const updateProfile = (key: keyof Profile, value: string) => setProfile((current) => ({ ...current, [key]: value }));
-  const save = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); setSaving(true); setStatus(''); setError('');
-    const { error: saveError } = await supabase.from('farmer_profiles').upsert({ id: user.id, ...profile });
-    setSaving(false);
-    if (saveError) { console.error('profile save failed', saveError); setError('We could not save your details. Please try again.'); return; }
-    onAnswersChange({ state: profile.state, district: profile.district, soil: profile.soil, water: profile.water, rainfall: profile.rainfall, season: profile.season, goal: profile.goal });
-    setStatus('Your farm details are saved.');
-  };
-
-  return <main className="account-page"><div className="page-heading"><p className="eyebrow">Personal account</p><h1>Your farm profile</h1><p>Save your details once, then use them whenever you return to AgriGuide.</p></div><div className="account-layout"><aside className="account-summary"><div className="avatar"><UserRound size={24} /></div><h2>{profile.display_name || 'Your account'}</h2><p>{user.email}</p><button className="sign-out" onClick={onSignOut}><LogOut size={15} /> Sign out</button></aside><form className="profile-form" onSubmit={save}><div className="profile-form-heading"><div><h2>Farm details</h2><p>These details help personalize your crop suggestions.</p></div><span className="saved-label">Private to you</span></div><label><span>Your name</span><input value={profile.display_name} onChange={(event) => updateProfile('display_name', event.target.value)} placeholder="Your name" /></label><div className="profile-grid"><label><span>State</span><input value={profile.state} onChange={(event) => updateProfile('state', event.target.value)} placeholder="State" /></label><label><span>District</span><input value={profile.district} onChange={(event) => updateProfile('district', event.target.value)} placeholder="District" /></label><label><span>Soil type</span><input value={profile.soil} onChange={(event) => updateProfile('soil', event.target.value)} placeholder="e.g. Loamy" /></label><label><span>Water availability</span><input value={profile.water} onChange={(event) => updateProfile('water', event.target.value)} placeholder="e.g. Moderate" /></label><label><span>Rainfall in cm</span><input value={profile.rainfall} onChange={(event) => updateProfile('rainfall', event.target.value)} placeholder="e.g. 50–100 cm" /></label><label><span>Farming season</span><input value={profile.season} onChange={(event) => updateProfile('season', event.target.value)} placeholder="e.g. Kharif" /></label><label><span>Main goal</span><input value={profile.goal} onChange={(event) => updateProfile('goal', event.target.value)} placeholder="e.g. Less water" /></label></div>{error && <p className="form-message error">{error}</p>}{status && <p className="form-message success">{status}</p>}<button className="button primary" disabled={saving}>{saving ? 'Saving...' : 'Save farm details'} <Check size={16} /></button></form></div></main>;
 }
 
 function Home({ onNavigate }: { onNavigate: (page: Page) => void }) {
